@@ -1,34 +1,50 @@
 {
-  "version": 1,
-  "last_run_utc": "2025-12-17T15:30:00Z",
+  "version": 2,
+  "last_run_utc": "2025-12-17T16:30:00Z",
   "pipeline_status": {
-    "csv_to_parquet_conversion": "completed",
-    "files_converted": 145,
-    "total_rows": 35408466
+    "options_csv_to_parquet": "completed",
+    "stocks_csv_to_parquet": "completed",
+    "optionstats_csv_to_parquet": "completed",
+    "spx_index_download": "completed"
   },
-  "processed_files": {
-    "2002": {
-      "02": 12,
-      "04": 22,
-      "05": 14
+  "data_summary": {
+    "options": {
+      "files": 145,
+      "rows": 35408466,
+      "location": "s3://opt-data-staging-project/parquet/options/"
     },
-    "2004": {
-      "01": 20
+    "stocks": {
+      "files": 145,
+      "rows": 403730,
+      "location": "s3://opt-data-staging-project/parquet/stocks/"
     },
-    "2005": {
-      "01": 20
+    "optionstats": {
+      "files": 145,
+      "rows": 407899,
+      "location": "s3://opt-data-staging-project/parquet/optionstats/"
     },
-    "2011": {
-      "01": 20
-    },
-    "2012": {
-      "01": 20
-    },
-    "2013": {
-      "11": 11
+    "spx_index": {
+      "rows": 3772,
+      "date_range": "2000-01-03 to 2014-12-30",
+      "location": "s3://opt-data-staging-project/parquet/index/spx_data.parquet"
     }
   },
+  "years_available": [2002, 2004, 2005, 2011, 2012, 2013],
+  "months_by_year": {
+    "2002": [2, 4, 5],
+    "2004": [1],
+    "2005": [1],
+    "2011": [1],
+    "2012": [1],
+    "2013": [11]
+  },
+  "modules": {
+    "options_db": "Query options data",
+    "market_data": "Stocks, SPX, beta calculations"
+  },
   "notes": {
-    "2025-12-17": "Initial CSV to Parquet conversion completed. 145 files, 35.4M rows."
+    "2025-12-17-1": "Initial CSV to Parquet conversion completed. 145 files, 35.4M option rows.",
+    "2025-12-17-2": "Added stock quotes (403k rows) and optionstats (408k rows) to Parquet.",
+    "2025-12-17-3": "Downloaded SPX index data from Yahoo Finance (2000-2014). Created beta calculation module."
   }
 }
