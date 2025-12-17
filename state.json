@@ -85,6 +85,25 @@
     "2025-12-17-4": "Set up Jupyter notebooks for data exploration, beta analysis, and strategy research.",
     "2025-12-17-5": "Built complete backtest framework: config, strategy, costs, risk, engine modules.",
     "2025-12-17-6": "Fixed MTM bug (missing expiration filter). Baseline backtest: 0.65% return, 88.9% win rate, 3.69 Sharpe.",
-    "2025-12-17-7": "Added status_report.py for GitHub visibility. ChatGPT can now track progress."
+    "2025-12-17-7": "Added status_report.py for GitHub visibility. ChatGPT can now track progress.",
+    "2025-12-17-8": "Implemented vega-targeted sizing (10k portfolio, 800/name), real SPY beta hedging (20bp threshold), 4x stop-loss enforcement.",
+    "2025-12-17-9": "Ran pilot backtest with hedging: 0.32% return, 53.3% win rate, 0.77 Sharpe, 0.56% max DD. Hedging working correctly."
+  },
+  "latest_backtest": {
+    "run_id": "20251217_135703",
+    "structure": "strangle",
+    "start_date": "2011-01-03",
+    "end_date": "2013-11-15",
+    "total_return": 0.0032,
+    "sharpe_ratio": 0.77,
+    "max_drawdown": 0.0056,
+    "win_rate": 0.533,
+    "total_trades": 30,
+    "config": {
+      "delta_target": 0.20,
+      "portfolio_vega_target": 10000,
+      "profit_take": 0.55,
+      "stop_loss_mult": 4.0
+    }
   }
 }

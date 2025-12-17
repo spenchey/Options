@@ -48,14 +48,29 @@ class MarketData:
     def _setup_s3(self):
         """Configure DuckDB for S3 access."""
         self.con.execute("INSTALL httpfs; LOAD httpfs;")
-        self.con.execute(f"""
-            CREATE SECRET (
-                TYPE S3,
-                KEY_ID '{os.getenv("AWS_ACCESS_KEY_ID")}',
-                SECRET '{os.getenv("AWS_SECRET_ACCESS_KEY")}',
-                REGION '{self.region}'
-            );
-        """)
+
+        # Try environment variables first, then fall back to credential chain
+        access_key = os.getenv("AWS_ACCESS_KEY_ID")
+        secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+
+        if access_key and secret_key:
+            self.con.execute(f"""
+                CREATE SECRET (
+                    TYPE S3,
+                    KEY_ID '{access_key}',
+                    SECRET '{secret_key}',
+                    REGION '{self.region}'
+                );
+            """)
+        else:
+            # Use AWS credential chain (shared credentials file, IAM role, etc.)
+            self.con.execute(f"""
+                CREATE SECRET (
+                    TYPE S3,
+                    PROVIDER CREDENTIAL_CHAIN,
+                    REGION '{self.region}'
+                );
+            """)
 
     def sql(self, query: str) -> pd.DataFrame:
         """Execute SQL query."""

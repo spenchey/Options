@@ -60,14 +60,26 @@ class OptionsDB:
     def _setup_s3(self):
         """Configure DuckDB for S3 access."""
         self.con.execute("INSTALL httpfs; LOAD httpfs;")
-        self.con.execute(f"""
-            CREATE SECRET (
-                TYPE S3,
-                KEY_ID '{self.access_key}',
-                SECRET '{self.secret_key}',
-                REGION '{self.region}'
-            );
-        """)
+
+        # Try environment variables first, then fall back to credential chain
+        if self.access_key and self.secret_key:
+            self.con.execute(f"""
+                CREATE SECRET (
+                    TYPE S3,
+                    KEY_ID '{self.access_key}',
+                    SECRET '{self.secret_key}',
+                    REGION '{self.region}'
+                );
+            """)
+        else:
+            # Use AWS credential chain (shared credentials file, IAM role, etc.)
+            self.con.execute(f"""
+                CREATE SECRET (
+                    TYPE S3,
+                    PROVIDER CREDENTIAL_CHAIN,
+                    REGION '{self.region}'
+                );
+            """)
 
         # Create view for easy querying
         parquet_path = f"s3://{self.bucket}/{self.parquet_prefix}/*/*/*"
