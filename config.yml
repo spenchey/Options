@@ -1,0 +1,63 @@
+# Options Research Pipeline Configuration
+# This file tells Claude Code how to connect to your data
+
+project: dissertation-options-beta-neutral
+description: Beta-neutral short-premium options trading strategy research
+
+# AWS Configuration
+aws:
+  region: us-east-2
+  # Credentials are stored in .env (not committed)
+
+# S3 Data Locations
+s3:
+  bucket: opt-data-staging-project
+  prefixes:
+    raw_csv: "General Backup/Raw Org Data by Year"    # Original CSV files
+    parquet: "parquet/options"                         # Converted Parquet files
+    state: "_pipeline_state"                           # Pipeline state/memory
+
+# Dataset Schema
+dataset:
+  # Columns in your options data
+  columns:
+    - UnderlyingSymbol
+    - UnderlyingPrice
+    - Exchange
+    - OptionSymbol
+    - OptionExt
+    - Type           # 'call' or 'put'
+    - Expiration
+    - DataDate
+    - Strike
+    - Last
+    - Bid
+    - Ask
+    - Volume
+    - OpenInterest
+    - IV             # Implied Volatility
+    - Delta
+    - Gamma
+    - Theta
+    - Vega
+    - AKA
+
+  # Partitioning for Parquet files
+  partitioning:
+    - year
+    - month
+
+  # Date parsing
+  date_format: "%m/%d/%Y"
+
+# Data Summary (for reference)
+data_summary:
+  total_rows: 35408466
+  years_available: [2002, 2004, 2005, 2011, 2012, 2013]
+  months_by_year:
+    2002: [2, 4, 5]      # Feb, Apr, May
+    2004: [1]            # Jan
+    2005: [1]            # Jan
+    2011: [1]            # Jan
+    2012: [1]            # Jan
+    2013: [11]           # Nov

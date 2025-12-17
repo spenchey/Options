@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Secrets & local config
+.env
+.aws/
+.aws-sso/
+# Keep .env.example as template
+!.env.example
+
+# Data (we keep it in S3)
+data/
+.parquet/
+*.parquet
+*.csv
+*.xlsx
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
