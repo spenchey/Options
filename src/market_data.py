@@ -98,6 +98,51 @@ class MarketData:
         query += " ORDER BY date"
         return self.sql(query)
 
+    def get_spy_price(self, date: str) -> float:
+        """
+        Get SPY price for a specific date.
+
+        Uses SPX data with spy_equiv column, or derives from SPX/10.
+
+        Args:
+            date: Date string (YYYY-MM-DD)
+
+        Returns:
+            SPY price (float), or 0 if not found
+        """
+        path = f"s3://{self.bucket}/parquet/index/spx_data.parquet"
+        date = pd.to_datetime(date).strftime('%Y-%m-%d')
+
+        try:
+            result = self.sql(f"""
+                SELECT spy_equiv, close
+                FROM read_parquet('{path}')
+                WHERE date = '{date}'
+                LIMIT 1
+            """)
+
+            if len(result) == 0:
+                # Try to find nearest date
+                result = self.sql(f"""
+                    SELECT spy_equiv, close, date
+                    FROM read_parquet('{path}')
+                    WHERE date <= '{date}'
+                    ORDER BY date DESC
+                    LIMIT 1
+                """)
+
+            if len(result) > 0:
+                # Use spy_equiv if available, otherwise SPX/10
+                spy = result['spy_equiv'].iloc[0]
+                if pd.isna(spy) or spy == 0:
+                    spy = result['close'].iloc[0] / 10
+                return float(spy)
+
+        except Exception as e:
+            print(f"Warning: Could not get SPY price for {date}: {e}")
+
+        return 0.0
+
     # ========== BETA CALCULATIONS ==========
 
     def calculate_stock_returns(self, year: int, month: int) -> pd.DataFrame:

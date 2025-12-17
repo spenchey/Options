@@ -328,6 +328,118 @@ def calculate_spy_equivalent_shares(
     return int(bwd / spy_price)
 
 
+# =============================================================================
+# Standalone utility functions (ChatGPT vega-targeting implementation)
+# =============================================================================
+
+def rolling_beta(returns_df: pd.DataFrame, window: int = 120, shrink: float = 0.6) -> pd.DataFrame:
+    """
+    Calculate rolling beta with shrinkage toward 1.0.
+
+    Args:
+        returns_df: DataFrame with columns ['date', 'ticker', 'ret', 'mkt'] (daily returns)
+        window: Rolling window size in days
+        shrink: Shrinkage factor toward 1.0 (0.6 = 60% raw beta + 40% prior of 1.0)
+
+    Returns:
+        DataFrame with ['date', 'ticker', 'beta']
+    """
+    def _ols_beta(g):
+        r = g.sort_values('date')
+        # Rolling covariance / variance
+        cov = r['mkt'].rolling(window).cov(r['ret'])
+        var = r['mkt'].rolling(window).var()
+        raw_beta = cov / var
+        # Shrink toward 1.0 and clip to [-2, 2]
+        beta = shrink * raw_beta + (1.0 - shrink) * 1.0
+        return pd.DataFrame({
+            'date': r['date'],
+            'ticker': r['ticker'],
+            'beta': beta.clip(-2, 2)
+        })
+
+    return returns_df.groupby('ticker', group_keys=False).apply(_ols_beta)
+
+
+def beta_weighted_delta(row: pd.Series) -> float:
+    """
+    Calculate beta-weighted delta exposure in $ terms.
+
+    Args:
+        row: Series with keys: delta, multiplier, contracts, underlying_price, beta
+
+    Returns:
+        $ exposure to market index (E_mkt)
+    """
+    return (
+        row['delta'] *
+        row['multiplier'] *
+        row['contracts'] *
+        row['underlying_price'] *
+        row['beta']
+    )
+
+
+def hedge_shares(total_mkt_exposure_usd: float, spy_price: float) -> int:
+    """
+    Calculate SPY shares needed to neutralize market exposure.
+
+    Args:
+        total_mkt_exposure_usd: Sum of beta-weighted deltas across portfolio ($)
+        spy_price: Current SPY price
+
+    Returns:
+        Number of SPY shares to buy (+) or sell (-) to hedge
+    """
+    if spy_price <= 0:
+        return 0
+    # Negative exposure -> buy SPY, positive exposure -> sell SPY
+    return round(-total_mkt_exposure_usd / spy_price)
+
+
+def calculate_portfolio_exposure(positions: list, betas: Dict[str, float]) -> Dict[str, float]:
+    """
+    Calculate portfolio-level exposure metrics for logging.
+
+    Args:
+        positions: List of position dicts with greeks
+        betas: Dict of ticker -> beta
+
+    Returns:
+        Dict with total_vega, total_gamma, E_mkt (before hedge)
+    """
+    total_vega = 0.0
+    total_gamma = 0.0
+    total_bwd = 0.0
+
+    for pos in positions:
+        ticker = pos.get('ticker', '')
+        beta = betas.get(ticker, 1.0)
+
+        # Vega (absolute value for exposure)
+        vega = abs(pos.get('vega', 0))
+        total_vega += vega
+
+        # Gamma
+        gamma = abs(pos.get('gamma', 0))
+        total_gamma += gamma
+
+        # Beta-weighted delta
+        delta = pos.get('delta', 0)
+        underlying_price = pos.get('underlying_price', 0)
+        contracts = pos.get('contracts', 1)
+        multiplier = pos.get('multiplier', 100)
+
+        bwd = delta * multiplier * contracts * underlying_price * beta
+        total_bwd += bwd
+
+    return {
+        'total_vega': total_vega,
+        'total_gamma': total_gamma,
+        'E_mkt_before_hedge': total_bwd
+    }
+
+
 if __name__ == '__main__':
     # Test the risk module
     print("Risk Module Test")

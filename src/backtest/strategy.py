@@ -6,6 +6,7 @@ Strangle and iron condor position construction from options data.
 
 import pandas as pd
 import numpy as np
+import math
 from dataclasses import dataclass
 from typing import Optional, List, Tuple, Dict
 from datetime import datetime, timedelta
@@ -332,6 +333,123 @@ class StrategyBuilder:
         loss = current_value - original_credit
 
         return loss >= original_credit * loss_limit
+
+
+# =============================================================================
+# Vega-targeted sizing functions (ChatGPT implementation)
+# =============================================================================
+
+def pick_strikes_by_target_delta(
+    chain_df: pd.DataFrame,
+    target_delta: float = 0.20,
+    right_put: str = 'put',
+    right_call: str = 'call'
+) -> Tuple[Optional[pd.Series], Optional[pd.Series]]:
+    """
+    Select put and call strikes closest to target delta.
+
+    Args:
+        chain_df: DataFrame with options for one underlying & expiry.
+                  Must have columns: 'Type', 'Delta', 'Strike', etc.
+        target_delta: Target absolute delta (e.g., 0.20 for 20-delta)
+        right_put: Value for put type in 'Type' column
+        right_call: Value for call type in 'Type' column
+
+    Returns:
+        (put_row, call_row) - Series for each leg, or None if not found
+    """
+    # Normalize type column
+    chain_df = chain_df.copy()
+    chain_df['_type_lower'] = chain_df['Type'].str.lower()
+
+    puts = chain_df[chain_df['_type_lower'] == right_put.lower()].copy()
+    calls = chain_df[chain_df['_type_lower'] == right_call.lower()].copy()
+
+    if len(puts) == 0 or len(calls) == 0:
+        return None, None
+
+    # Put delta is negative, so find closest to -target_delta
+    puts['_delta_diff'] = (puts['Delta'] + target_delta).abs()
+    best_put_idx = puts['_delta_diff'].idxmin()
+    put_row = puts.loc[best_put_idx]
+
+    # Call delta is positive, so find closest to +target_delta
+    calls['_delta_diff'] = (calls['Delta'] - target_delta).abs()
+    best_call_idx = calls['_delta_diff'].idxmin()
+    call_row = calls.loc[best_call_idx]
+
+    return put_row, call_row
+
+
+def contracts_for_target_vega(
+    contract_vega: float,
+    name_target_vega: float,
+    min_contracts: int = 1
+) -> int:
+    """
+    Calculate number of contracts to reach target vega exposure.
+
+    Args:
+        contract_vega: Vega per contract (absolute value)
+        name_target_vega: Target vega for this name
+        min_contracts: Minimum contracts to open
+
+    Returns:
+        Number of contracts
+    """
+    if pd.isna(contract_vega) or contract_vega == 0:
+        return 0
+    n = math.floor(abs(name_target_vega) / abs(contract_vega))
+    return max(n, min_contracts)
+
+
+def vega_budget_allocator(
+    eligible_names: List[str],
+    per_name_cap: float,
+    portfolio_vega_target: float
+) -> Dict[str, float]:
+    """
+    Allocate vega budget across names, capped so total <= portfolio target.
+
+    Args:
+        eligible_names: List of ticker symbols
+        per_name_cap: Max vega per name
+        portfolio_vega_target: Total portfolio vega budget
+
+    Returns:
+        Dict {ticker: allocated_vega}
+    """
+    names = list(eligible_names)
+    if not names:
+        return {}
+
+    # If equal allocation would exceed target, scale down
+    raw_total = per_name_cap * len(names)
+    scale = min(1.0, portfolio_vega_target / max(1, raw_total))
+
+    return {n: per_name_cap * scale for n in names}
+
+
+def iv_scaled_vega_target(
+    base_vega: float,
+    ivp: float
+) -> float:
+    """
+    Scale vega target based on IV percentile (v2 enhancement).
+
+    Args:
+        base_vega: Base vega allocation for the name
+        ivp: IV percentile (0-100)
+
+    Returns:
+        Scaled vega target
+    """
+    if ivp < 20:
+        return base_vega * 0.5   # Low IV: reduce exposure
+    elif ivp > 60:
+        return base_vega * 1.5   # High IV: increase exposure
+    else:
+        return base_vega         # Normal: no scaling
 
 
 def analyze_strangle_opportunities(

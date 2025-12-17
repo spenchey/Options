@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
+import json
 from datetime import datetime, timedelta
 import sys
 import os
@@ -17,8 +18,21 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from .config import STRATEGY_PARAMS, PILOT_UNIVERSE, DATA_PERIODS, get_pilot_tickers
 from .costs import CostModel, TradeCost
-from .strategy import StrategyBuilder, Strangle, OptionLeg
-from .risk import RiskManager, BetaCalculator, PortfolioRisk, PositionGreeks
+from .strategy import (
+    StrategyBuilder, Strangle, OptionLeg,
+    pick_strikes_by_target_delta, contracts_for_target_vega, vega_budget_allocator
+)
+from .risk import RiskManager, BetaCalculator, PortfolioRisk, PositionGreeks, hedge_shares
+
+# Engine constants (from ChatGPT recommendations)
+PORTFOLIO_VEGA_TARGET = STRATEGY_PARAMS.get('portfolio_vega_target', 10_000)
+PER_NAME_CAP = STRATEGY_PARAMS.get('per_name_vega_cap', 0.08) * PORTFOLIO_VEGA_TARGET
+TARGET_DTE_RANGE = (STRATEGY_PARAMS['dte_min'], STRATEGY_PARAMS['dte_max'])
+TARGET_DELTA = STRATEGY_PARAMS['delta_target']
+LADDERS_PER_NAME = STRATEGY_PARAMS.get('ladders_per_name', 2)
+TP_PCT = STRATEGY_PARAMS['profit_take_pct']
+SL_MULT = STRATEGY_PARAMS['loss_limit_mult']
+REHEDGE_THRESHOLD_BP = STRATEGY_PARAMS.get('hedge_threshold_bp', 20)
 
 
 @dataclass
@@ -49,6 +63,9 @@ class DailySnapshot:
     num_positions: int
     total_theta: float
     total_vega: float
+    total_gamma: float = 0.0
+    E_mkt_before_hedge: float = 0.0
+    E_mkt_after_hedge: float = 0.0
 
 
 @dataclass
@@ -81,6 +98,7 @@ class BacktestResult:
     daily_snapshots: List[DailySnapshot]
     trades: List[TradeRecord]
     positions_summary: pd.DataFrame
+    exposure_log: List[Dict] = field(default_factory=list)
 
 
 class BacktestEngine:
@@ -125,6 +143,10 @@ class BacktestEngine:
         self.positions: Dict[str, Position] = {}
         self.spy_hedge_shares = 0
         self.spy_hedge_cost_basis = 0.0
+        self.spy_prev_close = 0.0  # For daily hedge P&L
+
+        # Exposure tracking
+        self.exposure_log: List[Dict] = []
 
         # Results tracking
         self.daily_snapshots: List[DailySnapshot] = []
@@ -380,12 +402,9 @@ class BacktestEngine:
 
         close_cost = (put_price + call_price) * abs(position.contracts) * 100
 
-        # Sanity check: close cost should not exceed some reasonable multiple of entry credit
-        # For a 2x stop loss, max close cost should be ~3x entry credit
-        max_reasonable_cost = position.entry_credit * 4
-        if close_cost > max_reasonable_cost:
-            self.log(f"  SKIP CLOSE {ticker}: close cost ${close_cost:,.0f} exceeds reasonable limit")
-            return
+        # CRITICAL FIX: Do NOT skip closes due to high cost
+        # Per ChatGPT: "close at 4× and log it. Skipping hides the left tail."
+        # We ALWAYS close regardless of cost - this is essential for accurate backtesting
 
         # Transaction costs
         tx_cost = self.cost_model.strangle_trade_cost(
@@ -504,9 +523,92 @@ class BacktestEngine:
 
     def _adjust_hedge(self, date: str):
         """Adjust SPY hedge to maintain beta neutrality."""
-        # This is simplified - in practice would need SPY price data
-        # For now, calculate target hedge but don't execute
-        pass
+        # Get SPY price for this date
+        try:
+            spy_price = self.md.get_spy_price(date)
+        except:
+            spy_price = 0
+
+        if spy_price <= 0:
+            return 0.0  # Can't hedge without SPY price
+
+        # Calculate total market exposure from positions
+        E_mkt = 0.0
+        for ticker, position in self.positions.items():
+            if position.status != 'open':
+                continue
+
+            # Get beta for this ticker
+            beta = self.beta_calc.get_beta(ticker, date)
+
+            # Position delta (strangle has 2 legs)
+            put_delta = position.strangle.put.delta
+            call_delta = position.strangle.call.delta
+            net_delta = (put_delta + call_delta) * abs(position.contracts) * 100
+
+            # Dollar delta
+            underlying_price = position.strangle.put.underlying_price
+            dollar_delta = net_delta * underlying_price
+
+            # Beta-weighted exposure
+            E_mkt += dollar_delta * beta
+
+        # Store pre-hedge exposure for logging
+        self._current_E_mkt_before = E_mkt
+
+        # Check if re-hedge needed (threshold = 0.20% of equity)
+        portfolio_value = self.cash + sum(
+            p.entry_credit - p.current_value for p in self.positions.values()
+        )
+        threshold = REHEDGE_THRESHOLD_BP * 1e-4 * portfolio_value
+
+        # Account for existing hedge
+        hedge_exposure = self.spy_hedge_shares * spy_price
+        net_exposure = E_mkt + hedge_exposure
+
+        self._current_E_mkt_after = net_exposure
+
+        hedge_pnl = 0.0
+
+        # First, mark existing hedge to market
+        if self.spy_hedge_shares != 0 and self.spy_prev_close > 0:
+            spy_move = spy_price - self.spy_prev_close
+            hedge_pnl = self.spy_hedge_shares * spy_move
+
+        # Re-hedge if exposure exceeds threshold
+        if abs(net_exposure) > threshold:
+            target_shares = hedge_shares(E_mkt, spy_price)
+            shares_to_trade = target_shares - self.spy_hedge_shares
+
+            if shares_to_trade != 0:
+                # Trade SPY
+                trade_cost = self.cost_model.spy_trade_cost(shares_to_trade)
+                trade_value = shares_to_trade * spy_price
+
+                self.cash -= trade_value  # Buy costs money, sell returns money
+                self.cash -= trade_cost.total
+
+                # Update hedge position
+                self.spy_hedge_shares = target_shares
+                self.spy_hedge_cost_basis = target_shares * spy_price
+
+                # Record trade
+                self.trades.append(TradeRecord(
+                    date=date,
+                    ticker='SPY',
+                    action='hedge',
+                    contracts=shares_to_trade,
+                    price=spy_price,
+                    cost=trade_cost.total,
+                    pnl=0.0
+                ))
+
+                self.log(f"  HEDGE: {shares_to_trade:+d} SPY @ ${spy_price:.2f}")
+
+        # Update prev close for next day
+        self.spy_prev_close = spy_price
+
+        return hedge_pnl
 
     def _record_snapshot(self, date: str):
         """Record daily portfolio snapshot."""
@@ -515,18 +617,37 @@ class BacktestEngine:
 
         # Total P&L
         unrealized_pnl = sum(p.pnl for p in self.positions.values())
-        realized_pnl = sum(t.pnl for t in self.trades if t.action != 'open')
+        realized_pnl = sum(t.pnl for t in self.trades if t.action not in ('open', 'hedge'))
         total_pnl = unrealized_pnl + realized_pnl
 
-        # Portfolio value
-        portfolio_value = self.cash + sum(p.entry_credit - p.current_value
-                                          for p in self.positions.values())
+        # Portfolio value (including SPY hedge value)
+        positions_pnl = sum(p.entry_credit - p.current_value for p in self.positions.values())
+        spy_value = self.spy_hedge_shares * self.spy_prev_close if self.spy_prev_close > 0 else 0
+        portfolio_value = self.cash + positions_pnl + spy_value
 
         # Daily P&L
         if self.daily_snapshots:
             daily_pnl = portfolio_value - self.daily_snapshots[-1].portfolio_value
         else:
             daily_pnl = portfolio_value - self.initial_capital
+
+        # Greeks
+        total_vega = sum(
+            abs(p.strangle.put.vega) + abs(p.strangle.call.vega)
+            for p in self.positions.values()
+        ) * 100  # Per position vega
+        total_theta = sum(
+            p.strangle.put.theta + p.strangle.call.theta
+            for p in self.positions.values()
+        )
+        total_gamma = sum(
+            p.strangle.put.gamma + p.strangle.call.gamma
+            for p in self.positions.values()
+        )
+
+        # Get exposure values (set by _adjust_hedge)
+        E_mkt_before = getattr(self, '_current_E_mkt_before', 0.0)
+        E_mkt_after = getattr(self, '_current_E_mkt_after', 0.0)
 
         snapshot = DailySnapshot(
             date=date,
@@ -535,17 +656,30 @@ class BacktestEngine:
             positions_value=positions_value,
             total_pnl=total_pnl,
             daily_pnl=daily_pnl,
-            beta_weighted_delta=0.0,  # Would calculate from positions
+            beta_weighted_delta=E_mkt_before,
             spy_hedge_shares=self.spy_hedge_shares,
-            hedge_value=0.0,
+            hedge_value=spy_value,
             num_positions=len(self.positions),
-            total_theta=sum(p.strangle.put.theta + p.strangle.call.theta
-                           for p in self.positions.values()),
-            total_vega=sum(p.strangle.put.vega + p.strangle.call.vega
-                          for p in self.positions.values())
+            total_theta=total_theta,
+            total_vega=total_vega,
+            total_gamma=total_gamma,
+            E_mkt_before_hedge=E_mkt_before,
+            E_mkt_after_hedge=E_mkt_after
         )
 
         self.daily_snapshots.append(snapshot)
+
+        # Log exposure for export
+        self.exposure_log.append({
+            'date': date,
+            'num_positions': len(self.positions),
+            'total_vega': total_vega,
+            'total_gamma': total_gamma,
+            'E_mkt_before': E_mkt_before,
+            'E_mkt_after': E_mkt_after,
+            'spy_hedge_shares': self.spy_hedge_shares,
+            'portfolio_value': portfolio_value
+        })
 
     def _generate_results(self) -> BacktestResult:
         """Generate final backtest results."""
@@ -639,7 +773,8 @@ class BacktestEngine:
             sharpe_ratio=sharpe,
             daily_snapshots=self.daily_snapshots,
             trades=self.trades,
-            positions_summary=positions_df
+            positions_summary=positions_df,
+            exposure_log=self.exposure_log
         )
 
 
@@ -668,6 +803,99 @@ def print_results(results: BacktestResult):
     if len(results.positions_summary) > 0:
         print(f"\n--- Positions ---")
         print(results.positions_summary.to_string(index=False))
+
+
+def save_results(results: BacktestResult, output_dir: str = "results/baseline/strangle"):
+    """
+    Save backtest results to files.
+
+    Creates:
+        - daily_pnl.parquet: Daily P&L time series
+        - summary.json: Summary metrics
+        - exposure.csv: Daily exposure log
+
+    Args:
+        results: BacktestResult from backtest run
+        output_dir: Directory to save files
+    """
+    from pathlib import Path
+
+    # Create output directory
+    out_path = Path(output_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    # 1. Daily P&L to Parquet
+    if results.daily_snapshots:
+        daily_data = [{
+            'date': s.date,
+            'portfolio_value': s.portfolio_value,
+            'daily_pnl': s.daily_pnl,
+            'total_pnl': s.total_pnl,
+            'num_positions': s.num_positions,
+            'total_vega': s.total_vega,
+            'total_theta': s.total_theta,
+            'total_gamma': s.total_gamma,
+            'spy_hedge_shares': s.spy_hedge_shares,
+            'E_mkt_before_hedge': s.E_mkt_before_hedge,
+            'E_mkt_after_hedge': s.E_mkt_after_hedge
+        } for s in results.daily_snapshots]
+        daily_df = pd.DataFrame(daily_data)
+        daily_df.to_parquet(out_path / "daily_pnl.parquet", index=False)
+        print(f"Saved: {out_path / 'daily_pnl.parquet'}")
+
+    # 2. Summary JSON
+    summary = {
+        'run_id': datetime.now().strftime('%Y%m%d_%H%M%S'),
+        'structure': 'strangle',
+        'start_date': results.start_date,
+        'end_date': results.end_date,
+        'initial_capital': results.initial_capital,
+        'final_value': results.final_value,
+        'total_return': results.total_return,
+        'total_pnl': results.total_pnl,
+        'max_drawdown': results.max_drawdown,
+        'sharpe_ratio': results.sharpe_ratio,
+        'win_rate': results.win_rate,
+        'total_trades': results.num_trades,
+        'avg_win': results.avg_win,
+        'avg_loss': results.avg_loss,
+        'config': {
+            'delta_target': TARGET_DELTA,
+            'dte_range': list(TARGET_DTE_RANGE),
+            'portfolio_vega_target': PORTFOLIO_VEGA_TARGET,
+            'per_name_cap': PER_NAME_CAP,
+            'ladders_per_name': LADDERS_PER_NAME,
+            'profit_take': TP_PCT,
+            'stop_loss_mult': SL_MULT,
+            'rehedge_threshold_bp': REHEDGE_THRESHOLD_BP
+        }
+    }
+    with open(out_path / "summary.json", 'w') as f:
+        json.dump(summary, f, indent=2)
+    print(f"Saved: {out_path / 'summary.json'}")
+
+    # 3. Exposure log to CSV
+    if results.exposure_log:
+        exposure_df = pd.DataFrame(results.exposure_log)
+        exposure_df.to_csv(out_path / "exposure.csv", index=False)
+        print(f"Saved: {out_path / 'exposure.csv'}")
+
+    # 4. Trades to CSV
+    if results.trades:
+        trades_data = [{
+            'date': t.date,
+            'ticker': t.ticker,
+            'action': t.action,
+            'contracts': t.contracts,
+            'price': t.price,
+            'cost': t.cost,
+            'pnl': t.pnl
+        } for t in results.trades]
+        trades_df = pd.DataFrame(trades_data)
+        trades_df.to_csv(out_path / "trades.csv", index=False)
+        print(f"Saved: {out_path / 'trades.csv'}")
+
+    return out_path
 
 
 if __name__ == '__main__':

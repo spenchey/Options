@@ -40,7 +40,7 @@ DATA_PERIODS = {
     2013: [11],  # November only
 }
 
-# Strategy Parameters (from ChatGPT plan)
+# Strategy Parameters (from ChatGPT plan - updated with vega targeting)
 STRATEGY_PARAMS = {
     # Structure selection
     'structure': 'strangle',      # 'strangle' or 'iron_condor'
@@ -48,28 +48,32 @@ STRATEGY_PARAMS = {
     # DTE targeting
     'dte_target': 45,             # Target days to expiration
     'dte_min': 30,                # Minimum DTE to open position
-    'dte_max': 60,                # Maximum DTE to open position
+    'dte_max': 45,                # Maximum DTE to open position (tighter range)
 
-    # Delta targeting for short strikes
-    'delta_target': 0.16,         # ~16 delta wings (1 std dev)
+    # Delta targeting for short strikes (20 delta per ChatGPT)
+    'delta_target': 0.20,         # 20 delta wings (higher carry)
     'delta_tolerance': 0.05,      # +/- 5 delta acceptable range
 
     # Position management
-    'profit_take_pct': 0.50,      # Close at 50% of max profit
-    'loss_limit_mult': 2.0,       # Close if loss > 2x credit received
+    'profit_take_pct': 0.55,      # Close at 55% of max profit
+    'loss_limit_mult': 4.0,       # Close at 4x credit (MUST close, no skipping)
     'roll_dte': 21,               # Roll when DTE drops below this
 
     # Beta hedging
     'hedge_instrument': 'SPY',    # Use SPY for hedging (SPX/10)
-    'beta_lookback': 60,          # Days for rolling beta calculation
-    'beta_shrinkage': 0.3,        # Shrink beta toward 1.0 (0.3 = 30% shrinkage)
-    'hedge_threshold': 0.02,      # Re-hedge when BWD moves > 2% of notional
+    'beta_lookback': 120,         # Days for rolling beta calculation
+    'beta_shrinkage': 0.6,        # Shrink beta toward 1.0 (60% shrinkage)
+    'hedge_threshold_bp': 20,     # Re-hedge when |E_mkt| > 0.20% of equity (20bp)
 
-    # Position sizing
+    # Vega-targeted position sizing (new)
+    'portfolio_vega_target': 10_000,  # Target portfolio |vega|
+    'per_name_vega_cap': 0.08,        # 8% of portfolio vega per name
+    'ladders_per_name': 2,            # Daily ladder concurrency
+
+    # Capital
     'capital': 1_000_000,         # $1M notional portfolio
     'max_position_pct': 0.10,     # Max 10% in any single name
     'sector_cap': 0.30,           # Max 30% in any sector
-    'max_vega': 0.08,             # Max 8% of portfolio vega per name
 }
 
 # Transaction costs (conservative estimates for 2011-2013)
