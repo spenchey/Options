@@ -1,6 +1,11 @@
 {
-  "generated_utc": "2025-12-17T18:31:29Z",
+  "generated_utc": "2025-12-17T19:39:16Z",
   "project": "dissertation-options-beta-neutral",
+  "git": {
+    "hash": "865122b",
+    "message": "feat: Implement vega-targeted sizing and real SPY beta hedging",
+    "branch": "main"
+  },
   "last_run_utc": "2025-12-17T17:00:00Z",
   "data_summary": {
     "options": {
@@ -63,7 +68,7 @@
   },
   "latest_backtest": {},
   "next_steps": [
-    "Implement actual SPY beta hedging in backtest engine",
+    "Run pilot backtest with vega targeting and beta hedging (2011-2013)",
     "Add iron condor structure support",
     "Test crash protection overlays",
     "Analyze variance risk premium across different periods",

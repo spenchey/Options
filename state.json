@@ -60,7 +60,7 @@
   },
   "research_goal": "Beta-neutral short-premium options trading strategy",
   "next_steps": [
-    "Implement actual SPY beta hedging in backtest engine",
+    "Run pilot backtest with vega targeting and beta hedging (2011-2013)",
     "Add iron condor structure support",
     "Test crash protection overlays",
     "Analyze variance risk premium across different periods",
@@ -72,7 +72,11 @@
     "SPX index data download",
     "Jupyter notebooks for exploration",
     "Backtest framework with config, strategy, costs, risk, engine modules",
-    "Baseline strangle backtest on 10-name pilot (88.9% win rate, 3.69 Sharpe)"
+    "Baseline strangle backtest on 10-name pilot (88.9% win rate, 3.69 Sharpe)",
+    "Vega-targeted sizing (10k portfolio target, 8% per-name cap)",
+    "Real SPY beta hedging with 20bp threshold re-hedge",
+    "4x stop-loss enforcement (no skipping - captures left tail)",
+    "Exposure logging (vega, gamma, E_mkt before/after hedge)"
   ],
   "notes": {
     "2025-12-17-1": "Initial CSV to Parquet conversion completed. 145 files, 35.4M option rows.",
