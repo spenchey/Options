@@ -43,7 +43,15 @@
     "options_db": "Query options data (src/options_db.py)",
     "market_data": "Stocks, SPX, beta calculations (src/market_data.py)",
     "convert_stocks": "CSV to Parquet conversion (src/convert_stocks.py)",
-    "download_spx": "SPX index data download (src/download_spx.py)"
+    "download_spx": "SPX index data download (src/download_spx.py)",
+    "status_report": "GitHub status generation (src/status_report.py)",
+    "backtest": {
+      "config": "Pilot universe and strategy params (src/backtest/config.py)",
+      "strategy": "Strangle/IC position builder (src/backtest/strategy.py)",
+      "costs": "Transaction cost model (src/backtest/costs.py)",
+      "risk": "Beta, Greeks, hedging (src/backtest/risk.py)",
+      "engine": "Backtest harness (src/backtest/engine.py)"
+    }
   },
   "notebooks": {
     "01_data_exploration": "Explore options, stocks, SPX data with visualizations",
@@ -52,15 +60,27 @@
   },
   "research_goal": "Beta-neutral short-premium options trading strategy",
   "next_steps": [
-    "Build backtest framework with daily P&L simulation",
-    "Implement beta hedging logic with rolling adjustments",
+    "Implement actual SPY beta hedging in backtest engine",
+    "Add iron condor structure support",
     "Test crash protection overlays",
-    "Analyze variance risk premium across different periods"
+    "Analyze variance risk premium across different periods",
+    "Expand backtest to more data periods when available"
+  ],
+  "completed_milestones": [
+    "CSV to Parquet data pipeline (35M+ option rows)",
+    "Stock quotes and optionstats conversion",
+    "SPX index data download",
+    "Jupyter notebooks for exploration",
+    "Backtest framework with config, strategy, costs, risk, engine modules",
+    "Baseline strangle backtest on 10-name pilot (88.9% win rate, 3.69 Sharpe)"
   ],
   "notes": {
     "2025-12-17-1": "Initial CSV to Parquet conversion completed. 145 files, 35.4M option rows.",
     "2025-12-17-2": "Added stock quotes (403k rows) and optionstats (408k rows) to Parquet.",
     "2025-12-17-3": "Downloaded SPX index data from Yahoo Finance (2000-2014). Created beta calculation module.",
-    "2025-12-17-4": "Set up Jupyter notebooks for data exploration, beta analysis, and strategy research."
+    "2025-12-17-4": "Set up Jupyter notebooks for data exploration, beta analysis, and strategy research.",
+    "2025-12-17-5": "Built complete backtest framework: config, strategy, costs, risk, engine modules.",
+    "2025-12-17-6": "Fixed MTM bug (missing expiration filter). Baseline backtest: 0.65% return, 88.9% win rate, 3.69 Sharpe.",
+    "2025-12-17-7": "Added status_report.py for GitHub visibility. ChatGPT can now track progress."
   }
 }

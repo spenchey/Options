@@ -1,0 +1,72 @@
+{
+  "generated_utc": "2025-12-17T18:31:29Z",
+  "project": "dissertation-options-beta-neutral",
+  "last_run_utc": "2025-12-17T17:00:00Z",
+  "data_summary": {
+    "options": {
+      "files": 145,
+      "rows": 35408466,
+      "location": "s3://opt-data-staging-project/parquet/options/"
+    },
+    "stocks": {
+      "files": 145,
+      "rows": 403730,
+      "location": "s3://opt-data-staging-project/parquet/stocks/"
+    },
+    "optionstats": {
+      "files": 145,
+      "rows": 407899,
+      "location": "s3://opt-data-staging-project/parquet/optionstats/"
+    },
+    "spx_index": {
+      "rows": 3772,
+      "date_range": "2000-01-03 to 2014-12-30",
+      "location": "s3://opt-data-staging-project/parquet/index/spx_data.parquet"
+    }
+  },
+  "years_available": [
+    2002,
+    2004,
+    2005,
+    2011,
+    2012,
+    2013
+  ],
+  "months_by_year": {
+    "2002": [
+      2,
+      4,
+      5
+    ],
+    "2004": [
+      1
+    ],
+    "2005": [
+      1
+    ],
+    "2011": [
+      1
+    ],
+    "2012": [
+      1
+    ],
+    "2013": [
+      11
+    ]
+  },
+  "backtest_modules": {
+    "config": true,
+    "strategy": true,
+    "costs": true,
+    "risk": true,
+    "engine": true
+  },
+  "latest_backtest": {},
+  "next_steps": [
+    "Implement actual SPY beta hedging in backtest engine",
+    "Add iron condor structure support",
+    "Test crash protection overlays",
+    "Analyze variance risk premium across different periods",
+    "Expand backtest to more data periods when available"
+  ]
+}
