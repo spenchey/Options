@@ -23,6 +23,10 @@ data/
 .vscode/
 .idea/
 
+# Jupyter
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
 # OS
 .DS_Store
 Thumbs.db

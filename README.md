@@ -12,7 +12,14 @@ Options/
   .env.example        # Template for credentials
   requirements.txt    # Python dependencies
   src/
-    options_db.py     # Database query interface
+    options_db.py     # Options data query interface
+    market_data.py    # Stocks, SPX, beta calculations
+    convert_stocks.py # CSV to Parquet conversion
+    download_spx.py   # SPX index data download
+  notebooks/
+    01_data_exploration.ipynb   # Explore options/stock/index data
+    02_beta_analysis.ipynb      # Beta calculations and hedging
+    03_strategy_research.ipynb  # Strategy development
   sql/                # SQL queries and views
   docs/               # Research notes and documentation
 ```
@@ -48,6 +55,21 @@ Options/
    # Custom SQL
    df = db.sql("SELECT * FROM options WHERE Delta BETWEEN 0.4 AND 0.6 LIMIT 100")
    ```
+
+## Using Jupyter Notebooks
+
+Start Jupyter from the project folder:
+```bash
+cd Options
+jupyter lab
+```
+
+Or in VS Code: Open any `.ipynb` file and VS Code will prompt to install the Jupyter extension.
+
+**Available notebooks:**
+- `01_data_exploration.ipynb` - Explore and visualize the data
+- `02_beta_analysis.ipynb` - Calculate and analyze stock betas
+- `03_strategy_research.ipynb` - Develop and test strategies
 
 ## For Claude Code
 

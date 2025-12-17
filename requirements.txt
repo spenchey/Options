@@ -6,3 +6,8 @@ duckdb
 python-dotenv
 pyyaml
 numpy
+yfinance
+jupyter
+jupyterlab
+matplotlib
+seaborn
