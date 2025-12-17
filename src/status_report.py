@@ -7,6 +7,7 @@ ChatGPT can read these files to understand current project state.
 
 import json
 import os
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 import yaml
@@ -15,6 +16,39 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config.yml"
 STATE_PATH = ROOT / "state.json"
 REPORT_DIR = ROOT / "reports"
+
+
+def get_git_commit():
+    """Get current git commit hash and short message."""
+    try:
+        # Get short hash
+        hash_result = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, cwd=ROOT
+        )
+        commit_hash = hash_result.stdout.strip() if hash_result.returncode == 0 else None
+
+        # Get commit message (first line)
+        msg_result = subprocess.run(
+            ["git", "log", "-1", "--format=%s"],
+            capture_output=True, text=True, cwd=ROOT
+        )
+        commit_msg = msg_result.stdout.strip() if msg_result.returncode == 0 else None
+
+        # Get branch name
+        branch_result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, cwd=ROOT
+        )
+        branch = branch_result.stdout.strip() if branch_result.returncode == 0 else None
+
+        return {
+            "hash": commit_hash,
+            "message": commit_msg,
+            "branch": branch
+        }
+    except Exception:
+        return {"hash": None, "message": None, "branch": None}
 
 
 def load_config():
@@ -68,7 +102,7 @@ def get_backtest_modules():
     return modules
 
 
-def render_markdown(config, state, backtest_summary, modules):
+def render_markdown(config, state, backtest_summary, modules, git_info=None):
     """Generate STATUS.md content."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -78,6 +112,8 @@ def render_markdown(config, state, backtest_summary, modules):
     lines.append(f"**Project:** {config.get('project', 'dissertation-options-beta-neutral')}")
     lines.append(f"**Last update (UTC):** {now}")
     lines.append(f"**Pipeline last run:** {state.get('last_run_utc', '—')}")
+    if git_info and git_info.get("hash"):
+        lines.append(f"**Git:** `{git_info['hash']}` ({git_info.get('branch', 'unknown')}) - {git_info.get('message', '')}")
     lines.append("")
 
     # Data summary
@@ -169,20 +205,22 @@ def main():
     state = load_state()
     backtest_summary = find_latest_backtest()
     modules = get_backtest_modules()
+    git_info = get_git_commit()
 
     # Generate markdown
-    md_content = render_markdown(config, state, backtest_summary, modules)
+    md_content = render_markdown(config, state, backtest_summary, modules, git_info)
 
     # Write STATUS.md
     status_md_path = REPORT_DIR / "STATUS.md"
     with open(status_md_path, 'w', encoding='utf-8') as f:
         f.write(md_content)
 
-    # Generate JSON snapshot
+    # Generate JSON snapshot (git_info already loaded above)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     snapshot = {
         "generated_utc": now,
         "project": config.get("project", "dissertation-options-beta-neutral"),
+        "git": git_info,
         "last_run_utc": state.get("last_run_utc"),
         "data_summary": state.get("data_summary", {}),
         "years_available": state.get("years_available", []),
