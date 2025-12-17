@@ -1,11 +1,12 @@
 {
-  "version": 2,
-  "last_run_utc": "2025-12-17T16:30:00Z",
+  "version": 3,
+  "last_run_utc": "2025-12-17T17:00:00Z",
   "pipeline_status": {
     "options_csv_to_parquet": "completed",
     "stocks_csv_to_parquet": "completed",
     "optionstats_csv_to_parquet": "completed",
-    "spx_index_download": "completed"
+    "spx_index_download": "completed",
+    "jupyter_notebooks_setup": "completed"
   },
   "data_summary": {
     "options": {
@@ -39,12 +40,27 @@
     "2013": [11]
   },
   "modules": {
-    "options_db": "Query options data",
-    "market_data": "Stocks, SPX, beta calculations"
+    "options_db": "Query options data (src/options_db.py)",
+    "market_data": "Stocks, SPX, beta calculations (src/market_data.py)",
+    "convert_stocks": "CSV to Parquet conversion (src/convert_stocks.py)",
+    "download_spx": "SPX index data download (src/download_spx.py)"
   },
+  "notebooks": {
+    "01_data_exploration": "Explore options, stocks, SPX data with visualizations",
+    "02_beta_analysis": "Beta calculations and beta-weighted delta hedging",
+    "03_strategy_research": "Strategy development template for beta-neutral short premium"
+  },
+  "research_goal": "Beta-neutral short-premium options trading strategy",
+  "next_steps": [
+    "Build backtest framework with daily P&L simulation",
+    "Implement beta hedging logic with rolling adjustments",
+    "Test crash protection overlays",
+    "Analyze variance risk premium across different periods"
+  ],
   "notes": {
     "2025-12-17-1": "Initial CSV to Parquet conversion completed. 145 files, 35.4M option rows.",
     "2025-12-17-2": "Added stock quotes (403k rows) and optionstats (408k rows) to Parquet.",
-    "2025-12-17-3": "Downloaded SPX index data from Yahoo Finance (2000-2014). Created beta calculation module."
+    "2025-12-17-3": "Downloaded SPX index data from Yahoo Finance (2000-2014). Created beta calculation module.",
+    "2025-12-17-4": "Set up Jupyter notebooks for data exploration, beta analysis, and strategy research."
   }
 }
