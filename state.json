@@ -1,27 +1,28 @@
 {
-  "version": 3,
-  "last_run_utc": "2025-12-17T17:00:00Z",
+  "version": 4,
+  "last_run_utc": "2025-12-18T20:00:00Z",
   "pipeline_status": {
     "options_csv_to_parquet": "completed",
     "stocks_csv_to_parquet": "completed",
     "optionstats_csv_to_parquet": "completed",
     "spx_index_download": "completed",
-    "jupyter_notebooks_setup": "completed"
+    "jupyter_notebooks_setup": "completed",
+    "full_data_upload": "completed"
   },
   "data_summary": {
     "options": {
-      "files": 145,
-      "rows": 35408466,
+      "files": 2970,
+      "rows": 814129572,
       "location": "s3://opt-data-staging-project/parquet/options/"
     },
     "stocks": {
-      "files": 145,
-      "rows": 403730,
+      "files": 2970,
+      "rows": 9227708,
       "location": "s3://opt-data-staging-project/parquet/stocks/"
     },
     "optionstats": {
-      "files": 145,
-      "rows": 407899,
+      "files": 2970,
+      "rows": 9378896,
       "location": "s3://opt-data-staging-project/parquet/optionstats/"
     },
     "spx_index": {
@@ -30,14 +31,20 @@
       "location": "s3://opt-data-staging-project/parquet/index/spx_data.parquet"
     }
   },
-  "years_available": [2002, 2004, 2005, 2011, 2012, 2013],
+  "years_available": [2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013],
   "months_by_year": {
-    "2002": [2, 4, 5],
-    "2004": [1],
-    "2005": [1],
-    "2011": [1],
-    "2012": [1],
-    "2013": [11]
+    "2002": [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "2003": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "2004": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "2005": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "2006": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "2007": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "2008": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "2009": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "2010": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "2011": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "2012": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    "2013": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
   },
   "modules": {
     "options_db": "Query options data (src/options_db.py)",
@@ -45,6 +52,7 @@
     "convert_stocks": "CSV to Parquet conversion (src/convert_stocks.py)",
     "download_spx": "SPX index data download (src/download_spx.py)",
     "status_report": "GitHub status generation (src/status_report.py)",
+    "upload_and_convert": "Full data upload from thumb drive (src/upload_and_convert.py)",
     "backtest": {
       "config": "Pilot universe and strategy params (src/backtest/config.py)",
       "strategy": "Strangle/IC position builder (src/backtest/strategy.py)",
@@ -60,11 +68,11 @@
   },
   "research_goal": "Beta-neutral short-premium options trading strategy",
   "next_steps": [
-    "Run pilot backtest with vega targeting and beta hedging (2011-2013)",
+    "Implement actual SPY beta hedging in backtest engine",
     "Add iron condor structure support",
     "Test crash protection overlays",
     "Analyze variance risk premium across different periods",
-    "Expand backtest to more data periods when available"
+    "Run full backtest on complete 2002-2013 dataset"
   ],
   "completed_milestones": [
     "CSV to Parquet data pipeline (35M+ option rows)",
@@ -73,10 +81,7 @@
     "Jupyter notebooks for exploration",
     "Backtest framework with config, strategy, costs, risk, engine modules",
     "Baseline strangle backtest on 10-name pilot (88.9% win rate, 3.69 Sharpe)",
-    "Vega-targeted sizing (10k portfolio target, 8% per-name cap)",
-    "Real SPY beta hedging with 20bp threshold re-hedge",
-    "4x stop-loss enforcement (no skipping - captures left tail)",
-    "Exposure logging (vega, gamma, E_mkt before/after hedge)"
+    "Full data upload: 814M option rows, 9.2M stock rows, 9.4M optionstats rows (Feb 2002 - Oct 2013)"
   ],
   "notes": {
     "2025-12-17-1": "Initial CSV to Parquet conversion completed. 145 files, 35.4M option rows.",
@@ -86,24 +91,6 @@
     "2025-12-17-5": "Built complete backtest framework: config, strategy, costs, risk, engine modules.",
     "2025-12-17-6": "Fixed MTM bug (missing expiration filter). Baseline backtest: 0.65% return, 88.9% win rate, 3.69 Sharpe.",
     "2025-12-17-7": "Added status_report.py for GitHub visibility. ChatGPT can now track progress.",
-    "2025-12-17-8": "Implemented vega-targeted sizing (10k portfolio, 800/name), real SPY beta hedging (20bp threshold), 4x stop-loss enforcement.",
-    "2025-12-17-9": "Ran pilot backtest with hedging: 0.32% return, 53.3% win rate, 0.77 Sharpe, 0.56% max DD. Hedging working correctly."
-  },
-  "latest_backtest": {
-    "run_id": "20251217_135703",
-    "structure": "strangle",
-    "start_date": "2011-01-03",
-    "end_date": "2013-11-15",
-    "total_return": 0.0032,
-    "sharpe_ratio": 0.77,
-    "max_drawdown": 0.0056,
-    "win_rate": 0.533,
-    "total_trades": 30,
-    "config": {
-      "delta_target": 0.20,
-      "portfolio_vega_target": 10000,
-      "profit_take": 0.55,
-      "stop_loss_mult": 4.0
-    }
+    "2025-12-18-1": "Uploaded full dataset from thumb drive. 141 ZIP files, Feb 2002 - Oct 2013. 814M options, 9.2M stocks, 9.4M optionstats rows. 23x data increase."
   }
 }
