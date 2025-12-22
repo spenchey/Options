@@ -108,13 +108,75 @@ class OptionsDB:
             ORDER BY year, month
         """)
 
-    def query_month(self, year: int, month: int, limit: int = None) -> pd.DataFrame:
-        """Query all data for a specific month (uses partition pruning - fast!)."""
+    # Columns needed for backtest (minimal set for speed)
+    BACKTEST_COLUMNS = [
+        'datadate', 'underlyingsymbol', 'underlyingprice', 'expiration',
+        'type', 'strike', 'bid', 'ask', 'delta', 'gamma', 'theta', 'vega', 'iv'
+    ]
+
+    def query_month(self, year: int, month: int, limit: int = None,
+                    tickers: list = None, minimal: bool = False) -> pd.DataFrame:
+        """
+        Query data for a specific month (uses partition pruning).
+        
+        Args:
+            year, month: Period to query
+            limit: Optional row limit
+            tickers: Optional list of tickers to filter (huge speedup!)
+            minimal: If True, only return columns needed for backtest
+        """
         path = f"s3://{self.bucket}/{self.parquet_prefix}/year={year}/month={month:02d}/*.parquet"
-        query = f"SELECT * FROM read_parquet('{path}')"
+        
+        # Column selection
+        if minimal:
+            cols = ', '.join(self.BACKTEST_COLUMNS)
+        else:
+            cols = '*'
+        
+        query = f"SELECT {cols} FROM read_parquet('{path}')"
+        
+        # Ticker filter (pushdown to parquet - much faster)
+        if tickers:
+            ticker_list = "', '".join(tickers)
+            query += f" WHERE underlyingsymbol IN ('{ticker_list}')"
+        
         if limit:
             query += f" LIMIT {limit}"
-        return self.con.execute(query).df()
+        
+        df = self.con.execute(query).df()
+        df = self._normalize_columns(df)
+        return df
+    
+    def query_month_fast(self, year: int, month: int, tickers: list) -> pd.DataFrame:
+        """
+        Fast query for backtest - minimal columns, filtered tickers.
+        This is 10-50x faster than query_month with SELECT *.
+        """
+        return self.query_month(year, month, tickers=tickers, minimal=True)
+
+    def _normalize_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Normalize column names from lowercase to expected CamelCase."""
+        column_map = {
+            'datadate': 'DataDate',
+            'underlyingsymbol': 'UnderlyingSymbol',
+            'underlyingprice': 'UnderlyingPrice',
+            'expiration': 'Expiration',
+            'type': 'Type',
+            'strike': 'Strike',
+            'bid': 'Bid',
+            'ask': 'Ask',
+            'iv': 'IV',
+            'delta': 'Delta',
+            'gamma': 'Gamma',
+            'theta': 'Theta',
+            'vega': 'Vega',
+            'volume': 'Volume',
+            'openinterest': 'OpenInterest',
+            'year': 'year',
+            'month': 'month'
+        }
+        df.columns = [column_map.get(c.lower(), c) for c in df.columns]
+        return df
 
     def query_ticker(self, ticker: str, year: int = None, month: int = None,
                      option_type: str = None) -> pd.DataFrame:

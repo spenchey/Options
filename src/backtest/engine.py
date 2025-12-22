@@ -16,7 +16,7 @@ import os
 # Add parent to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from .config import STRATEGY_PARAMS, PILOT_UNIVERSE, DATA_PERIODS, get_pilot_tickers
+from .config import STRATEGY_PARAMS, PILOT_UNIVERSE, DATA_PERIODS, get_pilot_tickers, get_expected_months
 from .costs import CostModel, TradeCost
 from .strategy import (
     StrategyBuilder, Strangle, OptionLeg,
@@ -66,6 +66,12 @@ class DailySnapshot:
     total_gamma: float = 0.0
     E_mkt_before_hedge: float = 0.0
     E_mkt_after_hedge: float = 0.0
+    # P&L Attribution (for diagnostics)
+    options_pnl: float = 0.0           # Daily options MTM P&L
+    hedge_pnl: float = 0.0             # Daily SPY hedge P&L
+    transaction_costs: float = 0.0     # Daily transaction costs
+    gross_premium_outstanding: float = 0.0  # Total credit outstanding
+    avg_dte: float = 0.0               # Average DTE of open positions
 
 
 @dataclass
@@ -99,6 +105,8 @@ class BacktestResult:
     trades: List[TradeRecord]
     positions_summary: pd.DataFrame
     exposure_log: List[Dict] = field(default_factory=list)
+    months_processed: int = 0
+    months_expected: int = 0
 
 
 class BacktestEngine:
@@ -118,7 +126,9 @@ class BacktestEngine:
         options_db,
         market_data,
         capital: float = STRATEGY_PARAMS['capital'],
-        verbose: bool = True
+        verbose: bool = True,
+        costs_enabled: bool = True,
+        stops_enabled: bool = True
     ):
         """
         Args:
@@ -126,11 +136,15 @@ class BacktestEngine:
             market_data: MarketData instance for stock/SPX prices
             capital: Starting capital
             verbose: Print progress updates
+            costs_enabled: If False, zero out all transaction costs (diagnostic toggle)
+            stops_enabled: If False, disable stop-loss exits (diagnostic toggle)
         """
         self.db = options_db
         self.md = market_data
         self.initial_capital = capital
         self.verbose = verbose
+        self.costs_enabled = costs_enabled
+        self.stops_enabled = stops_enabled
 
         # Initialize components
         self.cost_model = CostModel()
@@ -147,6 +161,11 @@ class BacktestEngine:
 
         # Exposure tracking
         self.exposure_log: List[Dict] = []
+
+        # Daily P&L attribution tracking
+        self._daily_options_pnl = 0.0
+        self._daily_hedge_pnl = 0.0
+        self._daily_tx_costs = 0.0
 
         # Results tracking
         self.daily_snapshots: List[DailySnapshot] = []
@@ -209,10 +228,10 @@ class BacktestEngine:
         """Process a single month of data."""
         self.log(f"\n--- Processing {year}-{month:02d} ---")
 
-        # Load options data for this month
+        # Load options data for this month (fast: filtered by tickers, minimal columns)
         try:
-            options_df = self.db.query_month(year, month)
-            self.log(f"Loaded {len(options_df):,} option records")
+            options_df = self.db.query_month(year, month, tickers=tickers, minimal=True)
+            self.log(f"Loaded {len(options_df):,} option records (filtered)")
         except Exception as e:
             self.log(f"Error loading data: {e}")
             return
@@ -240,6 +259,11 @@ class BacktestEngine:
         tickers: List[str]
     ):
         """Process a single trading day."""
+        # Reset daily P&L trackers
+        self._daily_options_pnl = 0.0
+        self._daily_hedge_pnl = 0.0
+        self._daily_tx_costs = 0.0
+        
         # 1. Mark existing positions to market
         self._mark_to_market(date, options_df)
 
@@ -351,10 +375,11 @@ class BacktestEngine:
                 tickers_to_close.append((ticker, 'close_profit'))
                 continue
 
-            # Check stop loss (2x credit)
-            if current_premium >= original_credit * (1 + STRATEGY_PARAMS['loss_limit_mult']):
-                tickers_to_close.append((ticker, 'close_loss'))
-                continue
+            # Check stop loss (4x credit) - only if stops enabled
+            if self.stops_enabled:
+                if current_premium >= original_credit * (1 + STRATEGY_PARAMS['loss_limit_mult']):
+                    tickers_to_close.append((ticker, 'close_loss'))
+                    continue
 
             # Check approaching expiry (roll threshold)
             try:
@@ -406,13 +431,23 @@ class BacktestEngine:
         # Per ChatGPT: "close at 4× and log it. Skipping hides the left tail."
         # We ALWAYS close regardless of cost - this is essential for accurate backtesting
 
-        # Transaction costs
-        tx_cost = self.cost_model.strangle_trade_cost(
-            abs(position.contracts),  # Buying to close
-            put_price * 0.98, put_price * 1.02,
-            call_price * 0.98, call_price * 1.02,
-            is_opening=False
-        ).total
+        # Transaction costs (zero if costs disabled)
+        if self.costs_enabled:
+            tx_cost = self.cost_model.strangle_trade_cost(
+                abs(position.contracts),  # Buying to close
+                put_price * 0.98, put_price * 1.02,
+                call_price * 0.98, call_price * 1.02,
+                is_opening=False
+            ).total
+        else:
+            tx_cost = 0.0
+
+        # Track daily transaction costs for attribution
+        self._daily_tx_costs += tx_cost
+
+        # Options P&L (before costs) for attribution
+        options_pnl = position.entry_credit - close_cost
+        self._daily_options_pnl += options_pnl
 
         # Realized P&L
         realized_pnl = position.entry_credit - close_cost - tx_cost
@@ -484,12 +519,18 @@ class BacktestEngine:
 
             # Calculate entry credit and costs
             entry_credit = best.credit * contracts * 100
-            tx_cost = self.cost_model.strangle_trade_cost(
-                -contracts,
-                best.put.bid, best.put.ask,
-                best.call.bid, best.call.ask,
-                is_opening=True
-            ).total
+            if self.costs_enabled:
+                tx_cost = self.cost_model.strangle_trade_cost(
+                    -contracts,
+                    best.put.bid, best.put.ask,
+                    best.call.bid, best.call.ask,
+                    is_opening=True
+                ).total
+            else:
+                tx_cost = 0.0
+            
+            # Track daily transaction costs
+            self._daily_tx_costs += tx_cost
 
             # Update cash (receive credit, pay costs)
             self.cash += entry_credit
@@ -574,6 +615,8 @@ class BacktestEngine:
         if self.spy_hedge_shares != 0 and self.spy_prev_close > 0:
             spy_move = spy_price - self.spy_prev_close
             hedge_pnl = self.spy_hedge_shares * spy_move
+            # Track daily hedge P&L for attribution
+            self._daily_hedge_pnl += hedge_pnl
 
         # Re-hedge if exposure exceeds threshold
         if abs(net_exposure) > threshold:
@@ -582,11 +625,18 @@ class BacktestEngine:
 
             if shares_to_trade != 0:
                 # Trade SPY
-                trade_cost = self.cost_model.spy_trade_cost(shares_to_trade)
+                if self.costs_enabled:
+                    trade_cost = self.cost_model.spy_trade_cost(shares_to_trade)
+                    tx_cost = trade_cost.total
+                else:
+                    tx_cost = 0.0
                 trade_value = shares_to_trade * spy_price
+                
+                # Track daily transaction costs
+                self._daily_tx_costs += tx_cost
 
                 self.cash -= trade_value  # Buy costs money, sell returns money
-                self.cash -= trade_cost.total
+                self.cash -= tx_cost
 
                 # Update hedge position
                 self.spy_hedge_shares = target_shares
@@ -649,6 +699,24 @@ class BacktestEngine:
         E_mkt_before = getattr(self, '_current_E_mkt_before', 0.0)
         E_mkt_after = getattr(self, '_current_E_mkt_after', 0.0)
 
+        # Calculate gross premium outstanding (total credit of open positions)
+        gross_premium = sum(p.entry_credit for p in self.positions.values())
+        
+        # Calculate average DTE of open positions
+        avg_dte = 0.0
+        if self.positions:
+            from datetime import datetime as dt
+            dte_list = []
+            for p in self.positions.values():
+                try:
+                    exp_date = dt.strptime(p.strangle.put.expiration, '%Y-%m-%d')
+                    curr_date = dt.strptime(date, '%Y-%m-%d')
+                    dte_list.append((exp_date - curr_date).days)
+                except:
+                    pass
+            if dte_list:
+                avg_dte = sum(dte_list) / len(dte_list)
+
         snapshot = DailySnapshot(
             date=date,
             portfolio_value=portfolio_value,
@@ -664,21 +732,34 @@ class BacktestEngine:
             total_vega=total_vega,
             total_gamma=total_gamma,
             E_mkt_before_hedge=E_mkt_before,
-            E_mkt_after_hedge=E_mkt_after
+            E_mkt_after_hedge=E_mkt_after,
+            # P&L Attribution
+            options_pnl=self._daily_options_pnl,
+            hedge_pnl=self._daily_hedge_pnl,
+            transaction_costs=self._daily_tx_costs,
+            gross_premium_outstanding=gross_premium,
+            avg_dte=avg_dte
         )
 
         self.daily_snapshots.append(snapshot)
 
-        # Log exposure for export
+        # Log exposure for export (includes P&L attribution)
         self.exposure_log.append({
             'date': date,
             'num_positions': len(self.positions),
             'total_vega': total_vega,
             'total_gamma': total_gamma,
+            'total_theta': total_theta,
             'E_mkt_before': E_mkt_before,
             'E_mkt_after': E_mkt_after,
             'spy_hedge_shares': self.spy_hedge_shares,
-            'portfolio_value': portfolio_value
+            'portfolio_value': portfolio_value,
+            # P&L Attribution
+            'options_pnl': self._daily_options_pnl,
+            'hedge_pnl': self._daily_hedge_pnl,
+            'transaction_costs': self._daily_tx_costs,
+            'gross_premium_outstanding': gross_premium,
+            'avg_dte': avg_dte
         })
 
     def _generate_results(self) -> BacktestResult:
@@ -699,7 +780,9 @@ class BacktestEngine:
                 sharpe_ratio=0.0,
                 daily_snapshots=[],
                 trades=[],
-                positions_summary=pd.DataFrame()
+                positions_summary=pd.DataFrame(),
+                months_processed=getattr(self, '_months_processed', 0),
+                months_expected=getattr(self, '_months_expected', 0)
             )
 
         # Basic metrics
@@ -774,7 +857,9 @@ class BacktestEngine:
             daily_snapshots=self.daily_snapshots,
             trades=self.trades,
             positions_summary=positions_df,
-            exposure_log=self.exposure_log
+            exposure_log=self.exposure_log,
+            months_processed=getattr(self, '_months_processed', 0),
+            months_expected=getattr(self, '_months_expected', 0)
         )
 
 
@@ -824,7 +909,7 @@ def save_results(results: BacktestResult, output_dir: str = "results/baseline/st
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    # 1. Daily P&L to Parquet
+    # 1. Daily P&L to Parquet (includes P&L attribution)
     if results.daily_snapshots:
         daily_data = [{
             'date': s.date,
@@ -837,7 +922,13 @@ def save_results(results: BacktestResult, output_dir: str = "results/baseline/st
             'total_gamma': s.total_gamma,
             'spy_hedge_shares': s.spy_hedge_shares,
             'E_mkt_before_hedge': s.E_mkt_before_hedge,
-            'E_mkt_after_hedge': s.E_mkt_after_hedge
+            'E_mkt_after_hedge': s.E_mkt_after_hedge,
+            # P&L Attribution
+            'options_pnl': s.options_pnl,
+            'hedge_pnl': s.hedge_pnl,
+            'transaction_costs': s.transaction_costs,
+            'gross_premium_outstanding': s.gross_premium_outstanding,
+            'avg_dte': s.avg_dte
         } for s in results.daily_snapshots]
         daily_df = pd.DataFrame(daily_data)
         daily_df.to_parquet(out_path / "daily_pnl.parquet", index=False)
@@ -849,6 +940,8 @@ def save_results(results: BacktestResult, output_dir: str = "results/baseline/st
         'structure': 'strangle',
         'start_date': results.start_date,
         'end_date': results.end_date,
+        'months_processed': results.months_processed,
+        'months_expected': results.months_expected,
         'initial_capital': results.initial_capital,
         'final_value': results.final_value,
         'total_return': results.total_return,
@@ -896,6 +989,116 @@ def save_results(results: BacktestResult, output_dir: str = "results/baseline/st
         print(f"Saved: {out_path / 'trades.csv'}")
 
     return out_path
+
+
+
+
+def run_diagnostic_grid(options_db, market_data, tickers, start_year, start_month, end_year, end_month):
+    """
+    Run the 4-toggle diagnostic grid: Costs ON/OFF x Stops ON/OFF.
+    
+    This helps diagnose whether losses are due to:
+    - Transaction costs / spreads
+    - Stop-loss design / tail events
+    - Both
+    
+    Returns:
+        dict: Results for each configuration
+    """
+    configs = [
+        {'costs_enabled': True, 'stops_enabled': True, 'name': 'baseline'},
+        {'costs_enabled': False, 'stops_enabled': True, 'name': 'costs_off'},
+        {'costs_enabled': True, 'stops_enabled': False, 'name': 'stops_off'},
+        {'costs_enabled': False, 'stops_enabled': False, 'name': 'both_off'},
+    ]
+    
+    results = {}
+    
+    for config in configs:
+        print("")
+        print("=" * 60)
+        print(f"Running: {config['name']} (costs={config['costs_enabled']}, stops={config['stops_enabled']})")
+        print("=" * 60)
+        
+        engine = BacktestEngine(
+            options_db,
+            market_data,
+            costs_enabled=config['costs_enabled'],
+            stops_enabled=config['stops_enabled'],
+            verbose=False
+        )
+        
+        result = engine.run(tickers, start_year, start_month, end_year, end_month)
+        results[config['name']] = result
+        
+        print(f"Return: {result.total_return:.2%}, Sharpe: {result.sharpe_ratio:.2f}, Win Rate: {result.win_rate:.1%}")
+    
+    # Print summary table
+    print("")
+    print("=" * 60)
+    print("DIAGNOSTIC GRID SUMMARY")
+    print("=" * 60)
+    print(f"{'Config':<15} {'Return':>10} {'Sharpe':>10} {'Win Rate':>10} {'Max DD':>10}")
+    print("-" * 55)
+    for name, r in results.items():
+        print(f"{name:<15} {r.total_return:>10.2%} {r.sharpe_ratio:>10.2f} {r.win_rate:>10.1%} {r.max_drawdown:>10.2%}")
+    
+    return results
+
+
+def analyze_worst_days(results, n=10):
+    """
+    Analyze the worst N days from a backtest result.
+    
+    Returns:
+        DataFrame: Top N worst days with P&L attribution
+    """
+    if not results.daily_snapshots:
+        return pd.DataFrame()
+    
+    data = [{
+        'date': s.date,
+        'daily_pnl': s.daily_pnl,
+        'options_pnl': s.options_pnl,
+        'hedge_pnl': s.hedge_pnl,
+        'transaction_costs': s.transaction_costs,
+        'num_positions': s.num_positions,
+        'total_vega': s.total_vega
+    } for s in results.daily_snapshots]
+    
+    df = pd.DataFrame(data)
+    df['year_month'] = df['date'].str[:7]
+    
+    # Get worst days
+    worst = df.nsmallest(n, 'daily_pnl')
+    return worst
+
+
+def analyze_worst_trades(results, n=10):
+    """
+    Analyze the worst N trades from a backtest result.
+    
+    Returns:
+        DataFrame: Top N worst trades
+    """
+    if not results.trades:
+        return pd.DataFrame()
+    
+    trades = [{
+        'date': t.date,
+        'ticker': t.ticker,
+        'action': t.action,
+        'pnl': t.pnl,
+        'contracts': t.contracts,
+        'price': t.price
+    } for t in results.trades if t.action not in ('open', 'hedge')]
+    
+    df = pd.DataFrame(trades)
+    df['year_month'] = df['date'].str[:7]
+    
+    # Get worst trades
+    worst = df.nsmallest(n, 'pnl')
+    return worst
 
 
 if __name__ == '__main__':

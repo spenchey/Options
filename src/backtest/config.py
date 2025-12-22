@@ -2,7 +2,7 @@
 Backtest Configuration
 
 Pilot universe and strategy parameters for the baseline backtest engine.
-Adapted from ChatGPT Step 1 plan for 2011-2013 available data.
+Full dataset: Feb 2002 - Oct 2013 (141 months, 814M+ option rows).
 """
 
 # Pilot Universe - 10 liquid single-name equities across sectors
@@ -33,11 +33,20 @@ PILOT_UNIVERSE = {
     'PG': {'sector': 'Consumer Staples', 'avg_price': 72.29},
 }
 
-# Data availability constraints
+# Data availability - Full dataset Feb 2002 to Oct 2013 (141 months)
 DATA_PERIODS = {
-    2011: [1],   # January only
-    2012: [1],   # January only
-    2013: [11],  # November only
+    2002: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],  # Feb-Dec
+    2003: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    2004: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    2005: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    2006: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    2007: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    2008: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    2009: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    2010: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    2011: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    2012: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+    2013: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],  # Jan-Oct
 }
 
 # Strategy Parameters (from ChatGPT plan - updated with vega targeting)
@@ -76,7 +85,7 @@ STRATEGY_PARAMS = {
     'sector_cap': 0.30,           # Max 30% in any sector
 }
 
-# Transaction costs (conservative estimates for 2011-2013)
+# Transaction costs (conservative estimates for 2002-2013)
 COST_PARAMS = {
     'commission_per_contract': 1.00,      # $1.00 per contract
     'fee_per_contract': 0.25,             # Exchange fees
@@ -109,14 +118,21 @@ def get_sector_weights():
     return {s: count/total for s, count in sectors.items()}
 
 
+def get_expected_months():
+    """Return total expected months from DATA_PERIODS."""
+    return sum(len(months) for months in DATA_PERIODS.values())
+
+
 if __name__ == '__main__':
     print("Pilot Universe:")
     print("-" * 50)
     for ticker, info in PILOT_UNIVERSE.items():
         print(f"  {ticker:5} - {info['sector']:25} (${info['avg_price']:,.2f})")
 
-    print("\nSector Weights:")
+    print()
+    print("Sector Weights:")
     for sector, weight in get_sector_weights().items():
         print(f"  {sector:25}: {weight:.1%}")
 
-    print(f"\nData Periods: {DATA_PERIODS}")
+    print()
+    print(f"Data Periods: {len(DATA_PERIODS)} years, {get_expected_months()} months")

@@ -1,26 +1,26 @@
 {
-  "generated_utc": "2025-12-17T19:57:47Z",
+  "generated_utc": "2025-12-22T15:48:39Z",
   "project": "dissertation-options-beta-neutral",
   "git": {
-    "hash": "367993c",
-    "message": "chore: Update state.json and status reports with new milestones",
+    "hash": "pending",
+    "message": "pending commit",
     "branch": "main"
   },
-  "last_run_utc": "2025-12-17T17:00:00Z",
+  "last_run_utc": "2025-12-22T00:00:00Z",
   "data_summary": {
     "options": {
-      "files": 145,
-      "rows": 35408466,
+      "files": 2970,
+      "rows": 814129572,
       "location": "s3://opt-data-staging-project/parquet/options/"
     },
     "stocks": {
-      "files": 145,
-      "rows": 403730,
+      "files": 2970,
+      "rows": 9227708,
       "location": "s3://opt-data-staging-project/parquet/stocks/"
     },
     "optionstats": {
-      "files": 145,
-      "rows": 407899,
+      "files": 2970,
+      "rows": 9378896,
       "location": "s3://opt-data-staging-project/parquet/optionstats/"
     },
     "spx_index": {
@@ -29,34 +29,22 @@
       "location": "s3://opt-data-staging-project/parquet/index/spx_data.parquet"
     }
   },
-  "years_available": [
-    2002,
-    2004,
-    2005,
-    2011,
-    2012,
-    2013
-  ],
-  "months_by_year": {
-    "2002": [
-      2,
-      4,
-      5
-    ],
-    "2004": [
-      1
-    ],
-    "2005": [
-      1
-    ],
-    "2011": [
-      1
-    ],
-    "2012": [
-      1
-    ],
-    "2013": [
-      11
+  "data_coverage": {
+    "total_months": 141,
+    "period": "Feb 2002 - Oct 2013",
+    "years": [
+      2002,
+      2003,
+      2004,
+      2005,
+      2006,
+      2007,
+      2008,
+      2009,
+      2010,
+      2011,
+      2012,
+      2013
     ]
   },
   "backtest_modules": {
@@ -67,20 +55,19 @@
     "engine": true
   },
   "latest_backtest": {
-    "run_id": "20251217_135703",
+    "run_id": "20251220_113159",
     "structure": "strangle",
-    "start_date": "2011-01-03",
-    "end_date": "2013-11-15",
+    "period": "Feb 2002 - Oct 2013",
+    "months": 141,
     "initial_capital": 1000000,
-    "final_value": 1003171.8681958009,
-    "total_return": 0.003171868195800926,
-    "total_pnl": 3171.8681958009256,
-    "max_drawdown": 0.005590645514630021,
-    "sharpe_ratio": 0.7684994555274861,
-    "win_rate": 0.5333333333333333,
-    "total_trades": 30,
-    "avg_win": 337.385,
-    "avg_loss": -244.58571428571432,
+    "final_value": 987094.18,
+    "total_return": -0.0129,
+    "sharpe_ratio": -0.058,
+    "max_drawdown": 0.0365,
+    "win_rate": 0.573,
+    "total_trades": 1128,
+    "avg_win": 336.38,
+    "avg_loss": -346.05,
     "config": {
       "delta_target": 0.2,
       "dte_range": [
@@ -88,19 +75,16 @@
         45
       ],
       "portfolio_vega_target": 10000,
-      "per_name_cap": 800.0,
-      "ladders_per_name": 2,
       "profit_take": 0.55,
-      "stop_loss_mult": 4.0,
-      "rehedge_threshold_bp": 20
+      "stop_loss_mult": 4.0
     },
-    "summary_path": "results\\baseline\\strangle\\summary.json"
+    "finding": "Unhedged strategy NOT profitable. Beta hedging and crash protection essential."
   },
   "next_steps": [
-    "Run pilot backtest with vega targeting and beta hedging (2011-2013)",
-    "Add iron condor structure support",
-    "Test crash protection overlays",
-    "Analyze variance risk premium across different periods",
-    "Expand backtest to more data periods when available"
+    "CRITICAL: Implement real SPY beta hedging",
+    "Add P&L attribution (options vs hedge vs costs)",
+    "Run 4-toggle diagnostic (Costs ON/OFF x Stops ON/OFF)",
+    "Add crash protection overlays",
+    "Add iron condor structure support"
   ]
 }

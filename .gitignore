@@ -30,3 +30,9 @@ data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Backtest results (keep in S3, only summaries in reports/)
+results/
+
+# Selection cache (regenerate locally with: python -m src.backtest.selection_cache --generate)
+cache/
