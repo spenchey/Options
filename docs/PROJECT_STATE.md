@@ -9,6 +9,24 @@ dissertation-options-beta-neutral
 - optionstats: s3://opt-data-staging-project/parquet/optionstats/ (9,378,896 rows)
 - spx_index: s3://opt-data-staging-project/parquet/index/spx_data.parquet (3,772 rows)
 
+## Results & Cache (S3) - IMPORTANT
+**All results MUST be saved to S3, not locally.** User works from multiple computers.
+
+- results: s3://opt-data-staging-project/results/
+- cache: s3://opt-data-staging-project/cache/
+- reports: s3://opt-data-staging-project/reports/
+
+### Sync commands
+```bash
+# Download results/cache to local (before working)
+aws s3 sync s3://opt-data-staging-project/results/ results/
+aws s3 sync s3://opt-data-staging-project/cache/ cache/
+
+# Upload results/cache to S3 (after backtest runs)
+aws s3 sync results/ s3://opt-data-staging-project/results/
+aws s3 sync cache/ s3://opt-data-staging-project/cache/
+```
+
 ## Available data months
 - 2002: Feb-Dec (11 months)
 - 2003-2012: All months (12 months each)
@@ -28,7 +46,7 @@ dissertation-options-beta-neutral
 
 ### Cache
 - **6,553 selections** across 141 months
-- Location: `cache/selection_strangle_20d.parquet`
+- Location: s3://opt-data-staging-project/cache/selection_strangle_20d.parquet
 - Generated once, reusable for fast iterations
 
 ### 4-Toggle Diagnostic Grid Results
@@ -112,4 +130,5 @@ Read docs/PROJECT_STATE.md and reports/status.json first.
 Do not scan the whole repo.
 Then open only the files needed for the next task.
 Keep changes in small commits.
+Always sync results to S3 after backtest runs.
 ```

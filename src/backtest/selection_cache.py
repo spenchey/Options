@@ -194,6 +194,18 @@ def generate_selection_cache(tickers: list = None, verbose: bool = True):
             print(f"Total selections: {len(all_selections)}")
             print(f"Months processed: {months_processed}")
 
+        # Sync cache to S3 for multi-workstation access
+        import subprocess
+        bucket = "opt-data-staging-project"
+        cmd = f'aws s3 sync cache/ s3://{bucket}/cache/'
+        print(f"
+Syncing cache to S3...")
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        if result.returncode == 0:
+            print("Cache synced to S3 successfully")
+        else:
+            print(f"S3 sync failed: {result.stderr}")
+
     return df if all_selections else pd.DataFrame()
 
 

@@ -16,6 +16,12 @@ s3:
     raw_csv: "General Backup/Raw Org Data by Year"    # Original CSV files
     parquet: "parquet/options"                         # Converted Parquet files
     state: "_pipeline_state"                           # Pipeline state/memory
+    results: "results"                                 # Backtest results (ALWAYS save here)
+    cache: "cache"                                     # Selection cache for fast backtests
+    reports: "reports"                                 # Status reports
+
+# IMPORTANT: All results must be saved to S3, not locally.
+# This ensures access from any workstation.
 
 # Dataset Schema
 dataset:

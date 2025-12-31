@@ -890,18 +890,49 @@ def print_results(results: BacktestResult):
         print(results.positions_summary.to_string(index=False))
 
 
-def save_results(results: BacktestResult, output_dir: str = "results/baseline/strangle"):
+def sync_results_to_s3(local_dir: str = "results", s3_prefix: str = "results"):
     """
-    Save backtest results to files.
+    Sync local results directory to S3.
+
+    IMPORTANT: Always call this after saving results locally to ensure
+    results are available from any workstation.
+
+    Args:
+        local_dir: Local directory to sync (default: results)
+        s3_prefix: S3 prefix in opt-data-staging-project bucket
+    """
+    import subprocess
+
+    bucket = "opt-data-staging-project"
+    cmd = f'aws s3 sync {local_dir}/ s3://{bucket}/{s3_prefix}/'
+
+    print(f"
+Syncing to S3: {local_dir}/ -> s3://{bucket}/{s3_prefix}/")
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
+    if result.returncode == 0:
+        print("S3 sync completed successfully")
+    else:
+        print(f"S3 sync failed: {result.stderr}")
+
+    return result.returncode == 0
+
+
+def save_results(results: BacktestResult, output_dir: str = "results/baseline/strangle", upload_to_s3: bool = True):
+    """
+    Save backtest results to files and sync to S3.
 
     Creates:
         - daily_pnl.parquet: Daily P&L time series
         - summary.json: Summary metrics
         - exposure.csv: Daily exposure log
+        - trades.csv: All trades
 
     Args:
         results: BacktestResult from backtest run
-        output_dir: Directory to save files
+        output_dir: Directory to save files (relative to project root)
+        upload_to_s3: If True (default), sync results to S3 after saving locally.
+                      IMPORTANT: Keep True for multi-workstation access!
     """
     from pathlib import Path
 
@@ -987,6 +1018,12 @@ def save_results(results: BacktestResult, output_dir: str = "results/baseline/st
         trades_df = pd.DataFrame(trades_data)
         trades_df.to_csv(out_path / "trades.csv", index=False)
         print(f"Saved: {out_path / 'trades.csv'}")
+
+    # Sync to S3 for multi-workstation access
+    if upload_to_s3:
+        # Get the base results directory (e.g., "results")
+        base_dir = str(out_path).split('/')[0] if '/' in str(out_path) else str(out_path).split('\')[0]
+        sync_results_to_s3(base_dir, base_dir)
 
     return out_path
 

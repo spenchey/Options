@@ -1,6 +1,6 @@
 {
   "version": 5,
-  "last_run_utc": "2025-12-22T00:00:00Z",
+  "last_run_utc": "2025-12-31T15:54:11Z",
   "pipeline_status": {
     "options_csv_to_parquet": "completed",
     "stocks_csv_to_parquet": "completed",
@@ -225,7 +225,8 @@
       "costs": "Transaction cost model (src/backtest/costs.py)",
       "risk": "Beta, Greeks, hedging (src/backtest/risk.py)",
       "engine": "Backtest harness (src/backtest/engine.py)"
-    }
+    },
+    "s3_sync": "Auto-sync results/cache to S3 (in engine.py and selection_cache.py)"
   },
   "notebooks": {
     "01_data_exploration": "Explore options, stocks, SPX data with visualizations",
@@ -259,7 +260,8 @@
     "2025-12-17-6": "Fixed MTM bug (missing expiration filter). Baseline backtest: 0.65% return, 88.9% win rate, 3.69 Sharpe.",
     "2025-12-17-7": "Added status_report.py for GitHub visibility. ChatGPT can now track progress.",
     "2025-12-18-1": "Uploaded full dataset from thumb drive. 141 ZIP files, Feb 2002 - Oct 2013. 814M options, 9.2M stocks, 9.4M optionstats rows. 23x data increase.",
-    "2025-12-22-1": "Full 141-month backtest completed. CRITICAL FINDING: Unhedged strangle loses money (-1.29% return, -0.06 Sharpe). Original 3-month results were misleading. Beta hedging and crash overlays are essential."
+    "2025-12-22-1": "Full 141-month backtest completed. CRITICAL FINDING: Unhedged strangle loses money (-1.29% return, -0.06 Sharpe). Original 3-month results were misleading. Beta hedging and crash overlays are essential.",
+    "2025-12-31-1": "IMPORTANT: All results/cache now auto-sync to S3. save_results() and generate_selection_cache() both sync to s3://opt-data-staging-project/. Multi-workstation access enabled."
   },
   "backtest_results": {
     "baseline_unhedged": {
